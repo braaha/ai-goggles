@@ -1,75 +1,122 @@
-#donloaded these python libraries: opencv + numpy for videos
-#also soounddevice and soundfile for sound
+# Complete version combining camera + microphone test + simple frame analysis
+# Works as your starting AI Goggles test program
+
+import os
+import time
+import numpy as np
+import sounddevice as sd
+from datetime import datetime
+
+# Try to import camera library
+try:
+    from picamera2 import Picamera2
+    CAMERA_AVAILABLE = True
+except ImportError:
+    CAMERA_AVAILABLE = False
 
 import cv2
-import numpy as np
-import time
 
-# settings from 720 pixels, and 15 frames per second and (44 hz sound or 44,000 samples?)
+# Settings
 w = 1280
 h = 720
 fps = 15
 rate = 44100
 
+
+def test_camera():
+    print("=== CAMERA TEST ===")
+    if not CAMERA_AVAILABLE:
+        print("[ERROR] Picamera2 not available on this system.")
+        return False
+
+    try:
+        picam2 = Picamera2()
+        picam2.start()
+        time.sleep(2)
+        filename = f"test_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+        picam2.capture_file(filename)
+        picam2.close()
+        print(f"[OK] Image captured and saved as {filename}")
+        return True
+    except Exception as e:
+        print("[ERROR] Camera test failed:", e)
+        return False
+
+
+def test_microphone():
+    print("\n=== MICROPHONE TEST ===")
+    try:
+        duration = 5
+        sample_rate = 44100
+        print("Recording for 5 seconds... speak near the mic.")
+        recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='int16')
+        sd.wait()
+        np.save("test_audio.npy", recording)
+        print("[OK] Audio recorded and saved as test_audio.npy")
+        return True
+    except Exception as e:
+        print("[ERROR] Microphone test failed:", e)
+        return False
+
+
 def get_frame():
-    # dont have the real goggles camera
-    frame = np.zeros((h, w, 3), dtype=np.uint8)
-    
-    return frame
+    if CAMERA_AVAILABLE:
+        try:
+            picam2 = Picamera2()
+            picam2.start()
+            frame = picam2.capture_array()
+            picam2.close()
+            return frame
+        except:
+            frame = np.zeros((h, w, 3), dtype=np.uint8)
+            return frame
+    else:
+        frame = np.zeros((h, w, 3), dtype=np.uint8)
+        return frame
 
-def get_sound():
-    # still no mic so so just return nothing
-    sound = None
-    
-    return sound
 
-def analyze_frame(frame, mode="faces"):
-    # checking edges for now
+def analyze_frame(frame, mode="edges"):
     if frame is None:
         return None
     
     if mode == "edges":
-        
         edges = cv2.Canny(frame, 100, 200)
-        
         edges_colored = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-        
         return edges_colored
-    
-    if mode == "faces":
-        # here would be the part for face detection here
+    else:
         return frame
-    
-    return frame
 
-def analyze_sound(sound):
-    # no mic yet (place holder)
-    return sound
 
-def run():
-    print("starting test...")
-    
+def run_simulation():
+    print("\n=== STARTING SIMULATION ===")
     frames = 0
     t0 = time.time()
     try:
-        
-        while frames < 50:  # just 50 frames for now
-            f = get_frame()
-            v = analyze_frame(f, "edges")
-            s = get_sound()
+        while frames < 50:
+            frame = get_frame()
+            analyzed = analyze_frame(frame, "edges")
             frames += 1
             if frames % 10 == 0:
-                print("got", frames, "frames so far")
-                
-            time.sleep(1.0/fps)
+                print(f"Captured {frames} frames...")
+            time.sleep(1.0 / fps)
     except KeyboardInterrupt:
-        print("stopped by user (either user stopped the recording or battery died)")
-        
-        
+        print("Stopped manually")
     finally:
         dt = time.time() - t0
-        if dt <= 0: dt = 1
-        print("avg fps:", round(frames/dt, 2))
+        if dt <= 0:
+            dt = 1
+        print("Average FPS:", round(frames / dt, 2))
+        
+        print("Simulation complete.")
+
 
 if __name__ == "__main__":
-    run()
+    print("AI GOGGLES TEST START:")
+    cam_ok = test_camera()
+    mic_ok = test_microphone()
+    if cam_ok and mic_ok:
+        print("Both camera and microphone are working correctly.")
+    else:
+        print("One or more tests fail")
+
+    run_simulation()
