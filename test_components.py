@@ -3,7 +3,7 @@ import numpy as np
 import sounddevice as sd
 from datetime import datetime
 
-print("=== CAMERA TEST ===")
+print("CAMERA TEST: ")
 try:
     from picamera2 import Picamera2
     cam = Picamera2()
@@ -22,9 +22,9 @@ try:
     record = sd.rec(int(3 * 44100), samplerate=44100, channels=1, dtype='int16')
     sd.wait()
     np.save("test_audio.npy", record)
-    print("[OK] Microphone is working. Saved as test_audio.npy")
+    print("OK: Microphone is working. Saved as test_audio.npy")
 except Exception as e:
-    print("[ERROR] Microphone not detected or not working:", e)
+    print("ERROR: Microphone not detected or not working:", e)
 
-print("\n=== TEST COMPLETE ===")
-print("If you see both [OK] messages, everything works correctly.")
+print("TEST COMPLETE.")
+print("If you see both OK messages, everything works correctly.")

@@ -29,7 +29,7 @@ try:
     print("OK: Audio recorded and saved as test_audio.npy")
     
 except Exception:
-    print("[ERROR] Microphone test failed:")
+    print("ERROR: Microphone test failed:")
 
 print("TEST COMPLETE")
 #2 ok means both work

@@ -1,13 +1,10 @@
-# Complete version combining camera + microphone test + simple frame analysis
-# Works as your starting AI Goggles test program
-
 import os
 import time
 import numpy as np
 import sounddevice as sd
 from datetime import datetime
 
-# Try to import camera library
+# Trying camera
 try:
     from picamera2 import Picamera2
     CAMERA_AVAILABLE = True
@@ -24,7 +21,7 @@ rate = 44100
 
 
 def test_camera():
-    print("=== CAMERA TEST ===")
+    print("camera test")
     if not CAMERA_AVAILABLE:
         print("[ERROR] Picamera2 not available on this system.")
         return False
@@ -33,29 +30,30 @@ def test_camera():
         picam2 = Picamera2()
         picam2.start()
         time.sleep(2)
+        #saving as year,month,day,hour,minutes,time
         filename = f"test_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
         picam2.capture_file(filename)
         picam2.close()
-        print(f"[OK] Image captured and saved as {filename}")
+        print(f"OK: Image captured and saved as {filename}")
         return True
     except Exception as e:
-        print("[ERROR] Camera test failed:", e)
+        print("ERROR: Camera test failed:", e)
         return False
 
 
 def test_microphone():
-    print("\n=== MICROPHONE TEST ===")
+    print("MICROPHONE TEST")
     try:
         duration = 5
         sample_rate = 44100
-        print("Recording for 5 seconds... speak near the mic.")
+        print("recording for 5 seconds")
         recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='int16')
         sd.wait()
         np.save("test_audio.npy", recording)
-        print("[OK] Audio recorded and saved as test_audio.npy")
+        print("OK: Audio recorded and saved as test_audio.npy")
         return True
     except Exception as e:
-        print("[ERROR] Microphone test failed:", e)
+        print("ERROR: Microphone test failed:", e)
         return False
 
 
@@ -88,7 +86,7 @@ def analyze_frame(frame, mode="edges"):
 
 
 def run_simulation():
-    print("\n=== STARTING SIMULATION ===")
+    print("STARTING SIMULATION")
     frames = 0
     t0 = time.time()
     try:
@@ -111,11 +109,11 @@ def run_simulation():
 
 
 if __name__ == "__main__":
-    print("AI GOGGLES TEST START:")
+    print("AI GOGGLES TEST START:  ")
     cam_ok = test_camera()
     mic_ok = test_microphone()
     if cam_ok and mic_ok:
-        print("Both camera and microphone are working correctly.")
+        print("Both camera and microphone are working")
     else:
         print("One or more tests fail")
 
