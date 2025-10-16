@@ -4,7 +4,7 @@ import numpy as np
 import sounddevice as sd
 from datetime import datetime
 
-print("CAMERA tEST:")
+print("CAMERA TEST:")
 try:
     from picamera2 import Picamera2
     picam2 = Picamera2()

@@ -3,7 +3,7 @@ import numpy as np
 import sounddevice as sd
 from datetime import datetime
 
-print("CAMERA TEST: ")
+print("TEST Camera: ")
 try:
     from picamera2 import Picamera2
     cam = Picamera2()
@@ -12,9 +12,9 @@ try:
     name = f"test_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
     cam.capture_file(name)
     cam.close()
-    print(f"[OK] Camera is working. Saved image as {name}")
+    print(f"OK: Camera is working. Saved image as {name}")
 except Exception as e:
-    print("[ERROR] Camera not detected or not working:", e)
+    print("ERROR: Camera not detected or not working:", e)
 
 print("\n=== MICROPHONE TEST ===")
 try:

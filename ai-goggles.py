@@ -109,7 +109,7 @@ def run_simulation():
 
 
 if __name__ == "__main__":
-    print("AI GOGGLES TEST START:  ")
+    print("test starting:  ")
     cam_ok = test_camera()
     mic_ok = test_microphone()
     if cam_ok and mic_ok:
