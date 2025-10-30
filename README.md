@@ -1,4 +1,4 @@
-                                                  AI Goggles to Understand Influences on Well-being with Life-changing Injury or Pathology 
+AI Goggles to Understand Influences on Well-being with Life-changing Injury or Pathology
 
 
 
