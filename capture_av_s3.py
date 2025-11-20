@@ -2,100 +2,67 @@
 import argparse
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-
-def run_cmd(cmd_list, label=None, check=True):
-    """Run a shell command and stream output."""
-    if label:
-        print(label)
-    print(" ", " ".join(cmd_list))
-    sys.stdout.flush()
-
-    result = subprocess.run(cmd_list)
-    if check and result.returncode != 0:
-        raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(cmd_list)}")
-    return result
+from picamera2 import Picamera2
+from picamera2.encoders import H264Encoder
+from picamera2.outputs import FileOutput
 
 
-def record_av(seconds, width, height, fps, audio_device):
+def record_audio(audio_path: Path, seconds: int, device: str = "plughw:1,0"):
     """
-    Record audio and video for the given duration.
-
-    Returns paths: (video_path, audio_path, final_mp4_path, timestamp_str)
+    Record audio using arecord for the specified number of seconds.
     """
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    cwd = Path.cwd()
-
-    video_name = f"video_{ts}.h264"
-    audio_name = f"audio_{ts}.wav"
-    final_name = f"final_{ts}.mp4"
-
-    video_path = cwd / video_name
-    audio_path = cwd / audio_name
-    final_path = cwd / final_name
-
-    # 1) Start libcamera-vid for a fixed duration (milliseconds)
-    ms = int(seconds * 1000)
-    video_cmd = [
-        "libcamera-vid",
-        "-t", str(ms),
-        "-n",
-        "--width", str(width),
-        "--height", str(height),
-        "--framerate", str(fps),
-        "--codec", "h264",
-        "-o", str(video_path),
-    ]
-
-    # 2) Start arecord for fixed duration
-    audio_cmd = [
+    cmd = [
         "arecord",
-        "-D", audio_device,
+        "-D", device,
         "-f", "S16_LE",
         "-r", "44100",
         "-c", "2",
         "-d", str(seconds),
         str(audio_path),
     ]
+    print(f"[AUDIO] Running audio command: {' '.join(cmd)}")
+    sys.stdout.flush()
+    # Use Popen so audio can run while video records
+    return subprocess.Popen(cmd)
 
-    print("==========================================")
-    print(" Starting capture")
-    print(f"  Seconds:     {seconds}")
-    print(f"  Resolution:  {width}x{height}")
-    print(f"  FPS:         {fps}")
-    print(f"  Audio rate:  44100 Hz")
-    print(f"  Audio ch:    2")
-    print(f"  Device:      {audio_device}")
-    print("==========================================")
+
+def record_video(video_path: Path, seconds: int, width: int = 1280, height: int = 720, fps: int = 30):
+    """
+    Record video using Picamera2 (libcamera) to an .h264 file.
+    """
+    print(f"[VIDEO] Starting recording to {video_path.name} ({width}x{height}, {fps} fps)")
     sys.stdout.flush()
 
-    # Start video first, then audio right after so they overlap
-    print("[VIDEO] Starting libcamera-vid...")
-    video_proc = subprocess.Popen(video_cmd)
+    picam2 = Picamera2()
+    video_config = picam2.create_video_configuration(
+        main={"size": (width, height)}
+    )
+    picam2.configure(video_config)
 
-    print("[AUDIO] Starting arecord...")
-    audio_proc = subprocess.Popen(audio_cmd)
+    encoder = H264Encoder()
+    output = FileOutput(str(video_path))
 
-    # Wait for both to finish
-    video_proc.wait()
-    audio_proc.wait()
+    picam2.start_recording(encoder, output)
+    time.sleep(seconds)
+    picam2.stop_recording()
 
-    if video_proc.returncode != 0:
-        raise RuntimeError(f"libcamera-vid failed with code {video_proc.returncode}")
-    if audio_proc.returncode != 0:
-        raise RuntimeError(f"arecord failed with code {audio_proc.returncode}")
-
-    print(f"[INFO] Saved video: {video_path}")
-    print(f"[INFO] Saved audio: {audio_path}")
+    print("[VIDEO] Stopping recording")
     sys.stdout.flush()
 
-    # 3) Merge with ffmpeg using libx264 + aac (the combo that gave you working sound)
-    ffmpeg_cmd = [
+
+def merge_av_to_mp4(video_path: Path, audio_path: Path, final_path: Path, fps: int = 30):
+    """
+    Use ffmpeg to merge the .h264 video and .wav audio into an .mp4 file.
+    This follows the same pattern that already worked for you.
+    """
+    cmd = [
         "ffmpeg",
         "-y",
         "-r", str(fps),
@@ -108,87 +75,124 @@ def record_av(seconds, width, height, fps, audio_device):
         "-shortest",
         str(final_path),
     ]
-
-    print("[FFMPEG] Running merge:")
-    print(" ", " ".join(ffmpeg_cmd))
+    print(f"[FFMPEG] Running: {' '.join(cmd)}")
     sys.stdout.flush()
 
-    run_cmd(ffmpeg_cmd, check=True)
-
+    subprocess.run(cmd, check=True)
     print(f"[FFMPEG] MP4 created: {final_path}")
-    print("==========================================")
-    print(" DONE")
-    print(f" Video file: {video_path.name}")
-    print(f" Audio file: {audio_path.name}")
-    print(f" Final MP4:  {final_path.name}")
-    print("==========================================")
     sys.stdout.flush()
-
-    return video_path, audio_path, final_path, ts
 
 
 def upload_to_s3(file_path: Path, bucket: str, key: str, region: str):
-    """Upload the given file to S3."""
-    print(f"Uploading to S3 bucket='{bucket}', key='{key}', region='{region}'")
+    """
+    Upload the given file to S3.
+    """
+    print(f"[S3] Uploading to bucket='{bucket}', key='{key}', region='{region}'")
     sys.stdout.flush()
 
-    # Use explicit region to match your bucket (us-east-2)
     s3 = boto3.client("s3", region_name=region)
 
     try:
         s3.upload_file(str(file_path), bucket, key)
     except (BotoCoreError, ClientError) as e:
-        print("S3 upload failed with error:")
+        print("[S3] Upload failed with error:")
         print(e)
         raise
 
-    print("Upload successful.")
+    print("[S3] Upload successful.")
+    sys.stdout.flush()
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Record audio+video on Pi and upload merged MP4 to S3."
+        description="Record audio+video (arecord + Picamera2), merge with ffmpeg, and upload MP4 to S3."
     )
-
-    parser.add_argument("--seconds", type=int, default=5,
-                        help="Recording duration in seconds (default: 5)")
-    parser.add_argument("--width", type=int, default=1280,
-                        help="Video width (default: 1280)")
-    parser.add_argument("--height", type=int, default=720,
-                        help="Video height (default: 720)")
-    parser.add_argument("--fps", type=int, default=30,
-                        help="Video frames per second (default: 30)")
-
-    parser.add_argument("--audio-device", type=str, default="plughw:1,0",
-                        help="arecord device (default: plughw:1,0)")
-
-    parser.add_argument("--bucket", required=True,
-                        help="S3 bucket name (you have: ai-goggles-recordings)")
-    parser.add_argument("--prefix", default="ai-goggles",
-                        help="S3 key prefix (default: ai-goggles)")
-    parser.add_argument("--device-id", default="pi-goggles-1",
-                        help="Logical device id to include in the key path")
-
-    parser.add_argument("--region", default="us-east-2",
-                        help="AWS region for S3 client (default: us-east-2)")
-
+    parser.add_argument(
+        "--seconds",
+        type=int,
+        default=5,
+        help="Recording duration in seconds (default: 5)",
+    )
+    parser.add_argument(
+        "--bucket",
+        required=True,
+        help="S3 bucket name (you have: ai-goggles-recordings)",
+    )
+    parser.add_argument(
+        "--prefix",
+        default="ai-goggles",
+        help="S3 key prefix (default: ai-goggles)",
+    )
+    parser.add_argument(
+        "--device-id",
+        default="pi-goggles-1",
+        help="Logical device id to include in the key path",
+    )
+    parser.add_argument(
+        "--region",
+        default="us-east-2",
+        help="AWS region for S3 client (default: us-east-2)",
+    )
+    parser.add_argument(
+        "--audio-device",
+        default="plughw:1,0",
+        help="ALSA device for arecord (default: plughw:1,0)",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    seconds = args.seconds
+
+    # Timestamp for filenames
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    video_path = Path(f"video_{ts}.h264")
+    audio_path = Path(f"audio_{ts}.wav")
+    final_path = Path(f"final_{ts}.mp4")
+
+    print("==========================================")
+    print(" Starting capture")
+    print(f"  Seconds:     {seconds}")
+    print(f"  Resolution:  1280x720")
+    print(f"  FPS:         30")
+    print(f"  Audio rate:  44100 Hz")
+    print(f"  Audio ch:    2")
+    print(f"  Device:      {args.audio_device}")
+    print("==========================================")
+    sys.stdout.flush()
 
     try:
-        video_path, audio_path, final_path, ts = record_av(
-            seconds=args.seconds,
-            width=args.width,
-            height=args.height,
-            fps=args.fps,
-            audio_device=args.audio_device,
-        )
+        # Start audio first (like your working flow), then video
+        audio_proc = record_audio(audio_path, seconds, device=args.audio_device)
+        record_video(video_path, seconds, width=1280, height=720, fps=30)
+
+        # Wait for audio to finish
+        audio_ret = audio_proc.wait()
+        if audio_ret != 0:
+            raise RuntimeError(f"arecord failed with exit code {audio_ret}")
+
+        print(f"[AUDIO] Audio recorded to: {audio_path}")
+        print(f"[INFO] Saved video: {video_path.resolve()}")
+        print(f"[INFO] Saved audio: {audio_path.resolve()}")
+        sys.stdout.flush()
+
+        # Merge into MP4
+        merge_av_to_mp4(video_path, audio_path, final_path, fps=30)
+
+        print("==========================================")
+        print(" DONE")
+        print(f" Video file: {video_path.name}")
+        print(f" Audio file: {audio_path.name}")
+        print(f" Final MP4:  {final_path.name}")
+        print("==========================================")
+        sys.stdout.flush()
+
     except Exception as e:
         print("Error during recording or merging:")
         print(e)
+        sys.stdout.flush()
         sys.exit(1)
 
     # Build S3 key: prefix/device-id/filename
