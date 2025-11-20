@@ -1,7 +1,4 @@
-"""
-capture_av.py
-Record Pi camera video and mic audio.
-"""
+#original
 
 import argparse
 import time
