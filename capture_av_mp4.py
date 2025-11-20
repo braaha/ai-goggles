@@ -13,8 +13,18 @@ import soundfile as sf
 from picamera2 import Picamera2, encoders
 
 
-def record_video(path: Path, seconds: int, width: int, height: int, bitrate: int) -> None:
+def get_input_device_index() -> int:
+    """Pick the first audio device that can record (has input channels)."""
+    devices = sd.query_devices()
+    for idx, dev in enumerate(devices):
+        if dev["max_input_channels"] > 0:
+            print(f"Using input device {idx}: {dev['name']}")
+            return idx
+    raise RuntimeError("No input audio device found.")
 
+
+def record_video(path: Path, seconds: int, width: int, height: int, bitrate: int) -> None:
+    """Record video from the Pi camera into an H.264 file."""
     picam2 = Picamera2()
     config = picam2.create_video_configuration(main={"size": (width, height)})
     picam2.configure(config)
@@ -35,15 +45,25 @@ def record_audio_async(
     samplerate: int,
     channels: int,
 ) -> None:
-
+    """Record audio in a background thread and store it in out_buffer[key]."""
     frames = int(seconds * samplerate)
-    buf = sd.rec(frames, samplerate=samplerate, channels=channels, dtype="int16")
+
+    # Pick a working input device (USB mic, etc.)
+    device_index = get_input_device_index()
+
+    buf = sd.rec(
+        frames,
+        samplerate=samplerate,
+        channels=channels,
+        dtype="int16",
+        device=device_index,
+    )
     sd.wait()
     out_buffer[key] = buf
 
 
 def make_mp4(video_path: Path, audio_path: Path, output_path: Path) -> None:
-
+    """Use ffmpeg to combine H.264 video + WAV audio into an MP4 file."""
     cmd = [
         "ffmpeg",
         "-y",
@@ -88,10 +108,10 @@ def main() -> None:
     audio_path = Path(f"audio_{ts}.wav")
     final_path = Path(f"final_{ts}.mp4")
 
-
+    # Dict to share audio data between the audio thread and main thread
     audio_store: dict[str, np.ndarray] = {}
 
-
+    # Start audio recording in a background thread
     audio_thread = threading.Thread(
         target=record_audio_async,
         args=(audio_store, "buf", args.seconds, args.samplerate, args.channels),
@@ -99,23 +119,25 @@ def main() -> None:
     )
     audio_thread.start()
 
-
+    # Record video on the main thread
     record_video(video_path, args.seconds, args.width, args.height, args.bitrate)
 
-
+    # Wait for audio thread to finish
     audio_thread.join()
 
+    # Get the recorded audio
     audio_buf = audio_store.get("buf")
     if audio_buf is None:
         print("No audio buffer recorded, skipping WAV/MP4 creation.")
         return
 
+    # Save audio as WAV
     sf.write(str(audio_path), audio_buf, args.samplerate)
 
     print(f"Saved video: {video_path.resolve()}")
     print(f"Saved audio: {audio_path.resolve()}")
 
-    # make MP4
+    # Make MP4 with both
     make_mp4(video_path, audio_path, final_path)
 
 
