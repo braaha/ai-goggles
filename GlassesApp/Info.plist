@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string></string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Used to communicate with the glasses over Wi-Fi on your local network</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Used to connect and provision the smart glasses</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-peripheral</string>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+</dict>
+</plist>
